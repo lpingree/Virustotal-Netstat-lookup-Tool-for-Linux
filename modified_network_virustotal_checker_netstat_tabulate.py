@@ -1,3 +1,4 @@
+import time
 import re
 import requests
 import subprocess
@@ -33,10 +34,32 @@ def extract_ip_addresses(netstat_output):
     logging.info(f'Extracted external IPs: {found_ips}')
     return found_ips
 
+
 def resolve_domain_from_ip(ip_addresses):
     logging.debug('Resolving domain names for IP addresses...')
     domains = {}
     for ip in ip_addresses:
+        if not ip or ip.isspace():
+            continue  # Skip invalid IPs
+        try:
+            resolved_names = socket.gethostbyaddr(ip)
+            if len(resolved_names) > 1:
+                logging.warning(f'IP {ip} resolved to multiple addresses: {resolved_names}')
+            
+            main_hostname = resolved_names[0]
+            aliases = resolved_names[1]
+            domains[ip] = resolved_names[0]  # Use the first resolved name
+            logging.debug(f'Domain resolved for {ip}: {domains[ip]}')
+        except socket.herror:
+            domains[ip] = None
+            logging.warning(f'No domain resolved for {ip}')
+    return domains
+
+    logging.debug('Resolving domain names for IP addresses...')
+    domains = {}
+    for ip in ip_addresses:
+        if not ip or ip.isspace():
+            continue  # Skip invalid IPs
         try:
             domains[ip] = socket.gethostbyaddr(ip)[0]
             logging.debug(f'Domain resolved for {ip}: {domains[ip]}')
@@ -82,13 +105,15 @@ def main(api_key):
         logging.info("No external IP addresses found.")
         return
     resolved_domains = resolve_domain_from_ip(external_ips)
+    external_ips = [ip for ip in external_ips if ip]  # Remove empty IPs
     results = virustotal_lookup(api_key, resolved_domains)
+    time.sleep(5)  # Add a delay of 5 seconds between requests
     # Prepare data for tabular output
     table_data = [(ip, resolved_domains[ip] or '-', results.get(ip, 'Unknown')) for ip in external_ips]
     # Print table
     print(tabulate(table_data, headers=["Foreign Address", "Resolved Domain", "VirusTotal Scores"], tablefmt="grid"))
 
 # Replace 'YOUR_API_KEY_HERE' with your actual VirusTotal API key
-main('YOUR_API_KEY_HERE')
+main('f5de8518c0d6a97c0c430b1cc274cf0e9d9746df86122db2f4d63ae0152034c1')
 
 logging.info('Network Virustotal Checker using netstat completed.')
